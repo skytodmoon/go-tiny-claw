@@ -2,35 +2,32 @@
 
 ## 项目概述
 
-Go Tiny Claw 是一个轻量级的 AI Agent 框架，使用 Go 语言实现。核心目标是构建一个具备**慢思考、工具调用和任务推进能力**的 Agent 系统。
-
-## 核心能力
-
-- **慢思考（Thinking Phase）**：在 Main Loop 中显式区分思考与行动阶段。
-- **工具调用（Tool Registry）**：支持注册与分发工具，例如文件读取和编辑功能。  
-- **任务执行**：Agent 能够根据目标（如读取文件并总结）自主调用工具完成任务。
+Go Tiny Claw 是一个轻量级的 AI Agent 框架，采用 Go 语言实现。核心理念是设计一个"能慢思考、会用工具、能推进任务"的 Agent。
 
 ## 版本规划
 
 ### 🟢 Level 1（已完成）
-- 实现基础功能：慢思考、工具调用、单次任务执行。
-- 关键词：**慢思考 → 动手做 → 得到结果**
+- **慢思考**：显式区分 Thinking 和 Acting 阶段。
+- **工具调用**：至少接入 1 个工具。
+- **执行任务**：Agent 能够完成简单任务，如读取文件并总结。
 
 ### 🟡 Level 2（进阶）
-- 结构化思考、多步执行、动态工具选择。
-- 关键词：**让 Agent 开始"连续行动"**
+- 结构化 Thinking 阶段。
+- 支持多步任务执行。
+- 动态选择工具。
 
 ### 🔴 Level 3（挑战）
-- 优化 Agent 循环：Thinking → Acting → Observation → 再思考。
-- 根据执行结果调整行为，优化 Prompt 结构。
-- 关键词：**让 Agent 开始"像一个系统在运转"**
+- 动态调整行为。
+- 优化 Prompt 结构。
+- 完善循环机制。
 
 ## 已实现功能
 
-- 多 Provider 支持（OpenAI、Claude、MiniMax 等）。
-- 上下文管理与 Token 监控。
-- 工具注册表（ReadFile、WriteFile）。
-- 慢思考机制与基于文件的记忆存储。
+- 多 Provider 支持（OpenAI、Claude 等）。
+- 上下文管理。
+- 工具注册表（如文件读写）。
+- 慢思考机制。
+- 基于文件的记忆存储。
 
 ## 快速开始
 
@@ -42,23 +39,10 @@ go run cmd/claw/main.go
 ```
 
 ## 项目结构
-
 ```
 go-tiny-claw/
-├── cmd/
-│   └── claw/
-│       └── main.go
-├── internal/
-│   ├── engine/
-│   │   └── loop.go
-│   ├── provider/
-│   │   ├── interface.go
-│   │   └── ...
-│   ├── tools/
-│   │   ├── registry.go
-│   │   ├── read_file.go
-│   │   └── write_file.go
-│   └── memory/
+├── cmd/           # 程序入口
+├── internal/      # 核心实现（引擎、Provider、工具等）
 └── README.md
 ```
 
