@@ -2,15 +2,23 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os"
 
 	"github.com/skytodmoon/go-tiny-claw/internal/engine"
+	"github.com/skytodmoon/go-tiny-claw/internal/logger"
 	"github.com/skytodmoon/go-tiny-claw/internal/provider"
 	"github.com/skytodmoon/go-tiny-claw/internal/tools"
 )
 
 func main() {
+	if err := logger.Init(logger.INFO, "logs", true); err != nil {
+		fmt.Printf("初始化日志失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	log := logger.WithModule("main")
+
 	if os.Getenv("SILICONFLOW_API_KEY") == "" {
 		log.Fatal("请先导出 SILICONFLOW_API_KEY 环境变量")
 	}
@@ -30,6 +38,6 @@ func main() {
 
 	err := eng.Run(context.Background(), prompt)
 	if err != nil {
-		log.Fatalf("引擎运行崩溃: %v", err)
+		log.Fatal("引擎运行崩溃: %v", err)
 	}
 }

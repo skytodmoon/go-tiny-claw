@@ -2,49 +2,54 @@
 
 ## 项目概述
 
-Go Tiny Claw 是一个轻量级的 AI Agent 框架，采用 Go 语言实现。核心理念是设计一个"能慢思考、会用工具、能推进任务"的 Agent。
+Go Tiny Claw 是一个轻量级的 AI Agent 框架，使用 Go 语言实现。其核心理念是构建一个 **能慢思考、会用工具、能推进任务** 的 Agent。
 
 ## 版本规划
 
-### 🟢 Level 1（已完成）
-- **慢思考**：显式区分 Thinking 和 Acting 阶段。
-- **工具调用**：至少接入 1 个工具。
-- **执行任务**：Agent 能够完成简单任务，如读取文件并总结。
+### Level 1（已完成）
+- 实现慢思考机制（Thinking 阶段）
+- 工具调用（Tool Registry）
+- 单次任务执行能力
 
-### 🟡 Level 2（进阶）
-- 结构化 Thinking 阶段。
-- 支持多步任务执行。
-- 动态选择工具。
+### Level 2（已完成）
+- 结构化思考（输出计划）
+- 多步执行能力
+- 动态工具选择
 
-### 🔴 Level 3（挑战）
-- 动态调整行为。
-- 优化 Prompt 结构。
-- 完善循环机制。
-
-## 已实现功能
-
-- 多 Provider 支持（OpenAI、Claude 等）。
-- 上下文管理。
-- 工具注册表（如文件读写）。
-- 慢思考机制。
-- 基于文件的记忆存储。
+### Level 3（已完成）
+- 四阶段循环（Thinking → Acting → Observation → Re-thinking）
+- 动态上下文组装
+- Token 预算管理与自动压缩
+- 执行结果反馈机制
 
 ## 快速开始
 
 ```bash
-# 设置 API Key
+# 设置 API Key（选择其中一个）
 export SILICONFLOW_API_KEY="your-api-key"
+export ZHIPU_API_KEY="your-api-key"
+export NVIDIA_API_KEY="your-api-key"
 
+# 运行
 go run cmd/claw/main.go
 ```
 
 ## 项目结构
-```
-go-tiny-claw/
-├── cmd/           # 程序入口
-├── internal/      # 核心实现（引擎、Provider、工具等）
-└── README.md
-```
+
+- **cmd/claw/main.go**: 程序入口
+- **internal/engine/loop.go**: MainLoop 核心实现
+- **internal/provider/**: LLM Provider 适配器
+- **internal/context/**: 上下文管理
+- **internal/tools/**: 工具注册表与内置工具
+- **internal/memory/**: 基于文件的记忆存储
+- **internal/feishu/**: 飞书机器人集成
+
+## 当前功能
+
+- 多 Provider 支持（OpenAI、Claude、MiniMax、DeepSeek 等）
+- 上下文管理（Token 监控、自动压缩）
+- 工具注册表（ReadFile、WriteFile、EditFile）
+- 四阶段循环（Thinking → Acting → Observation → Re-thinking）
 
 ## License
 

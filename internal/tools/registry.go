@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 
+	"github.com/skytodmoon/go-tiny-claw/internal/logger"
 	"github.com/skytodmoon/go-tiny-claw/internal/schema"
 )
 
@@ -49,11 +49,12 @@ func NewRegistry() Registry {
 
 func (r *registryImpl) Register(tool BaseTool) {
 	name := tool.Name()
+	log := logger.WithModule("registry")
 	if _, exists := r.tools[name]; exists {
-		log.Printf("[Warning] 工具 '%s' 已经被注册，将被覆盖。\n", name)
+		log.Warn("工具 '%s' 已经被注册，将被覆盖。", name)
 	}
 	r.tools[name] = tool
-	log.Printf("[Registry] 成功挂载工具: %s\n", name)
+	log.Info("成功挂载工具: %s", name)
 }
 
 func (r *registryImpl) GetAvailableTools() []schema.ToolDefinition {

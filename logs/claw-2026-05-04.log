@@ -1,0 +1,18 @@
+2026-05-04 13:28:44.044 [[32mINFO[0m] [registry] 成功挂载工具: read_file[0m
+2026-05-04 13:28:44.044 [[32mINFO[0m] [registry] 成功挂载工具: write_file[0m
+2026-05-04 13:28:44.044 [[32mINFO[0m] [registry] 成功挂载工具: edit_file[0m
+2026-05-04 13:28:44.044 [[32mINFO[0m] [engine] [Engine] 启动 Agent Loop, 工作区: /Users/bob/Documents/trae_projects/go-tiny-claw
+[0m
+2026-05-04 13:28:44.044 [[32mINFO[0m] [engine] [Engine] Token 预算: 200000, 压缩阈值: 75%
+[0m
+2026-05-04 13:28:44.044 [[32mINFO[0m] [engine] [Thinking] 分析当前状态...[0m
+2026-05-04 13:28:44.044 [[32mINFO[0m] [engine] [Acting] 执行行动...[0m
+2026-05-04 13:28:46.700 [[32mINFO[0m] [engine] [Observation] 执行 1 个工具调用...
+[0m
+2026-05-04 13:28:46.700 [[32mINFO[0m] [engine] [Observation] 工具 read_file 执行成功
+[0m
+2026-05-04 13:28:46.700 [[32mINFO[0m] [engine] [Re-thinking] 根据观察结果调整策略...[0m
+2026-05-04 13:28:46.700 [[32mINFO[0m] [engine] [Thinking] 分析当前状态...[0m
+2026-05-04 13:28:46.700 [[32mINFO[0m] [engine] [Acting] 执行行动...[0m
+2026-05-04 13:29:23.254 [[32mINFO[0m] [engine] [Observation] 执行 1 个工具调用...
+[0m

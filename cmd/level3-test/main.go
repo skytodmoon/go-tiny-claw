@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 
 	"github.com/skytodmoon/go-tiny-claw/internal/engine"
 	"github.com/skytodmoon/go-tiny-claw/internal/provider"
-	"github.com/skytodmoon/go-tiny-claw/internal/schema"
 	"github.com/skytodmoon/go-tiny-claw/internal/tools"
 )
 

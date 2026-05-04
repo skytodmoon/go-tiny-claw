@@ -3,8 +3,8 @@ package engine
 import (
 	"context"
 	"fmt"
-	"log"
 
+	"github.com/skytodmoon/go-tiny-claw/internal/logger"
 	"github.com/skytodmoon/go-tiny-claw/internal/provider"
 	"github.com/skytodmoon/go-tiny-claw/internal/schema"
 	"github.com/skytodmoon/go-tiny-claw/internal/tools"
@@ -23,6 +23,7 @@ type AgentEngine struct {
 	EnableThinking bool
 	MaxTurns       int
 	tokenBudget    int
+	logger         *logger.Logger
 }
 
 func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, enableThinking bool) *AgentEngine {
@@ -33,6 +34,7 @@ func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, en
 		EnableThinking: enableThinking,
 		MaxTurns:       20,
 		tokenBudget:    MaxContextTokens,
+		logger:         logger.WithModule("engine"),
 	}
 }
 
@@ -140,7 +142,7 @@ func (e *AgentEngine) compactContext(messages []schema.Message) []schema.Message
 		return messages
 	}
 
-	log.Println("[Context] 触发自动压缩...")
+	e.logger.Info("[Context] 触发自动压缩...")
 
 	summary := "## 历史对话摘要\n\n"
 	for _, msg := range messages[1 : len(messages)-2] {
@@ -157,7 +159,7 @@ func (e *AgentEngine) compactContext(messages []schema.Message) []schema.Message
 	}
 	compacted = append(compacted, messages[len(messages)-2:]...)
 
-	log.Printf("[Context] 压缩完成: %d 条消息 -> %d 条消息\n", len(messages), len(compacted))
+	e.logger.Info("[Context] 压缩完成: %d 条消息 -> %d 条消息\n", len(messages), len(compacted))
 	return compacted
 }
 
@@ -166,8 +168,8 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 	fmt.Printf("  🎯 任务: %s\n", truncate(userPrompt, 52))
 	fmt.Println("╚══════════════════════════════════════════════════════════════════╝")
 
-	log.Printf("[Engine] 启动 Agent Loop, 工作区: %s\n", e.WorkDir)
-	log.Printf("[Engine] Token 预算: %d, 压缩阈值: %.0f%%\n", e.tokenBudget, CompactThreshold*100)
+	e.logger.Info("[Engine] 启动 Agent Loop, 工作区: %s\n", e.WorkDir)
+	e.logger.Info("[Engine] Token 预算: %d, 压缩阈值: %.0f%%\n", e.tokenBudget, CompactThreshold*100)
 
 	contextLayer := &ContextLayer{
 		SystemPrompt: e.buildSystemPrompt("thinking"),
@@ -203,7 +205,7 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 		fmt.Println("│ 🧠 Phase 1: THINKING                                             │")
 		fmt.Println("└──────────────────────────────────────────────────────────────────┘")
 		state.Phase = "THINKING"
-		log.Println("[Thinking] 分析当前状态...")
+		e.logger.Info("[Thinking] 分析当前状态...")
 
 		fmt.Println("\n💭 思考中...")
 		fmt.Println("   • 分析任务进展")
@@ -214,7 +216,7 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 		fmt.Println("│ 🚀 Phase 2: ACTING                                               │")
 		fmt.Println("└──────────────────────────────────────────────────────────────────┘")
 		state.Phase = "ACTING"
-		log.Println("[Acting] 执行行动...")
+		e.logger.Info("[Acting] 执行行动...")
 
 		actionResp, err := e.provider.Generate(ctx, messages, availableTools)
 		if err != nil {
@@ -243,7 +245,7 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 		fmt.Println("│ 👁️ Phase 3: OBSERVATION                                          │")
 		fmt.Println("└──────────────────────────────────────────────────────────────────┘")
 		state.Phase = "OBSERVATION"
-		log.Printf("[Observation] 执行 %d 个工具调用...\n", len(actionResp.ToolCalls))
+		e.logger.Info("[Observation] 执行 %d 个工具调用...\n", len(actionResp.ToolCalls))
 
 		for i, toolCall := range actionResp.ToolCalls {
 			record := ToolCallRecord{
@@ -260,14 +262,14 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 
 			if result.IsError {
 				fmt.Printf("   ❌ 失败: %s\n", result.Output)
-				log.Printf("[Observation] 工具 %s 执行失败: %s\n", toolCall.Name, result.Output)
+				e.logger.Info("[Observation] 工具 %s 执行失败: %s\n", toolCall.Name, result.Output)
 			} else {
 				output := result.Output
 				if len(output) > MaxObservationLen {
 					output = output[:MaxObservationLen] + "\n...[已截断]"
 				}
 				fmt.Printf("   ✅ 成功: %s\n", truncate(output, 150))
-				log.Printf("[Observation] 工具 %s 执行成功\n", toolCall.Name)
+				e.logger.Info("[Observation] 工具 %s 执行成功\n", toolCall.Name)
 			}
 
 			state.ToolCalls = append(state.ToolCalls, record)
@@ -284,7 +286,7 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 		fmt.Println("│ 🔄 Phase 4: RE-THINKING                                          │")
 		fmt.Println("└──────────────────────────────────────────────────────────────────┘")
 		state.Phase = "RE-THINKING"
-		log.Println("[Re-thinking] 根据观察结果调整策略...")
+		e.logger.Info("[Re-thinking] 根据观察结果调整策略...")
 
 		fmt.Println("\n📊 执行结果分析:")
 		for i, tc := range state.ToolCalls {
@@ -301,7 +303,7 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 
 	if turn >= e.MaxTurns {
 		fmt.Println("\n⚠️ 达到最大回合数限制")
-		log.Println("[Engine] 达到最大回合数限制")
+		e.logger.Info("[Engine] 达到最大回合数限制")
 	}
 
 	e.printSummary(states)
