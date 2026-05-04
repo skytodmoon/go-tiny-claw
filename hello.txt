@@ -1,1 +1,36 @@
+# Summary of README.md
+
+## Go Tiny Claw
+
+A lightweight AI Agent framework implemented in Go, designed around the core concept of "slow thinking, tool usage, and task execution."
+
+### Key Features
+
+1. **Slow Thinking Phase**: Explicitly separates thinking and acting in the Main Loop.
+2. **Tool Registry**: Supports multiple tools (e.g., file reading/editing) via a unified mechanism.
+3. **Task Execution**: Capable of completing tasks autonomously (e.g., reading and summarizing a file).
+
+### Version Plans
+
+- **Level 1**: Basic slow thinking, tool usage, and single-step task execution (completed).
+- **Level 2**: Structured planning, multi-step execution, and dynamic tool selection.
+- **Level 3**: Advanced loop with observation integration and prompt optimization.
+
+### Current Implementations
+
+- Multiple AI providers (OpenAI, Claude, MiniMax, etc.).
+- Context management and token monitoring.
+- File-based memory storage.
+
+### Quick Start
+
+Set the API key and run `go run cmd/claw/main.go`.
+
+## Project Structure
+
+Detailed directory layout is provided in the README.
+
+## License
+
+MIT
 Hello, go-tiny-claw 引擎！我是来自物理文件系统的一段神秘文本。大模型今天终于看到了我！
