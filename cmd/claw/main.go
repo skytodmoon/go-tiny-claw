@@ -31,6 +31,7 @@ func main() {
 	registry.Register(tools.NewReadFileTool(workDir))
 	registry.Register(tools.NewWriteFileTool(workDir))
 	registry.Register(tools.NewEditFileTool(workDir))
+	registry.Register(tools.NewBashTool(workDir))
 
 	eng := engine.NewAgentEngine(llmProvider, registry, workDir, true)
 

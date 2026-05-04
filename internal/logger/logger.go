@@ -103,17 +103,19 @@ func (l *Logger) log(level LogLevel, format string, args ...interface{}) {
 	levelName := levelNames[level]
 	message := fmt.Sprintf(format, args...)
 
-	var logLine string
-	if l.useColor {
-		color := levelColors[level]
-		logLine = fmt.Sprintf("%s [%s%s%s] [%s] %s%s",
-			timestamp, color, levelName, resetColor, l.module, message, resetColor)
-	} else {
-		logLine = fmt.Sprintf("%s [%s] [%s] %s", timestamp, levelName, l.module, message)
-	}
+	// Always use plain text for log files
+	plainLine := fmt.Sprintf("%s [%s] [%s] %s", timestamp, levelName, l.module, message)
 
-	for _, logger := range l.loggers {
-		logger.Println(logLine)
+	for i, logger := range l.loggers {
+		// Apply color only for stdout (first output) when useColor is enabled
+		if l.useColor && i == 0 {
+			color := levelColors[level]
+			coloredLine := fmt.Sprintf("%s [%s%s%s] [%s] %s%s",
+				timestamp, color, levelName, resetColor, l.module, message, resetColor)
+			logger.Println(coloredLine)
+		} else {
+			logger.Println(plainLine)
+		}
 	}
 
 	if level == FATAL {

@@ -80,6 +80,7 @@ func (e *AgentEngine) buildSystemPrompt(phase string) string {
 - read_file: 读取文件内容 {"path": "文件路径"}
 - write_file: 写入文件 {"path": "路径", "content": "内容"}
 - edit_file: 编辑文件 {"path": "路径", "old_str": "原文本", "new_str": "新文本"}
+- bash: 执行 bash 命令 {"command": "命令"}
 
 ## 执行原则
 

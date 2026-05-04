@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/skytodmoon/go-tiny-claw/internal/engine"
+	"github.com/skytodmoon/go-tiny-claw/internal/logger"
 	"github.com/skytodmoon/go-tiny-claw/internal/provider"
 	"github.com/skytodmoon/go-tiny-claw/internal/tools"
 )
@@ -24,13 +24,15 @@ func main() {
 	fmt.Println("╚══════════════════════════════════════════════════════════════╝")
 	fmt.Println()
 
+	log := logger.WithModule("level3-test")
+
 	if os.Getenv("SILICONFLOW_API_KEY") == "" {
-		log.Fatal("❌ SILICONFLOW_API_KEY not set")
+		log.Fatal("SILICONFLOW_API_KEY not set")
 	}
 
 	workDir, err := os.Getwd()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("无法获取工作目录: %v", err)
 	}
 
 	testCases := []TestCase{
@@ -47,6 +49,7 @@ func main() {
 	registry.Register(tools.NewReadFileTool(workDir))
 	registry.Register(tools.NewWriteFileTool(workDir))
 	registry.Register(tools.NewEditFileTool(workDir))
+	registry.Register(tools.NewBashTool(workDir))
 
 	eng := engine.NewAgentEngine(llmProvider, registry, workDir, true)
 
