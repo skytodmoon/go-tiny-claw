@@ -165,12 +165,12 @@ func (e *AgentEngine) compactContext(messages []schema.Message) []schema.Message
 }
 
 func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
-	fmt.Println("\n╔══════════════════════════════════════════════════════════════════╗")
-	fmt.Printf("  🎯 任务: %s\n", truncate(userPrompt, 52))
-	fmt.Println("╚══════════════════════════════════════════════════════════════════╝")
+	e.logger.Debug("[Engine] ═══════════════════════════════════════════════════════════════════")
+	e.logger.Debug("[Engine] 🎯 任务: %s", truncate(userPrompt, 52))
+	e.logger.Debug("[Engine] ═══════════════════════════════════════════════════════════════════")
 
-	e.logger.Info("[Engine] 启动 Agent Loop, 工作区: %s\n", e.WorkDir)
-	e.logger.Info("[Engine] Token 预算: %d, 压缩阈值: %.0f%%\n", e.tokenBudget, CompactThreshold*100)
+	e.logger.Info("[Engine] 启动 Agent Loop, 工作区: %s", e.WorkDir)
+	e.logger.Info("[Engine] Token 预算: %d, 压缩阈值: %.0f%%", e.tokenBudget, CompactThreshold*100)
 
 	contextLayer := &ContextLayer{
 		SystemPrompt: e.buildSystemPrompt("thinking"),
@@ -186,9 +186,9 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 		turn++
 		state := QueryState{Turn: turn}
 
-		fmt.Printf("\n┌──────────────────────────────────────────────────────────────────┐\n")
-		fmt.Printf("│ 🔄 Turn %d                                                        │\n", turn)
-		fmt.Println("└──────────────────────────────────────────────────────────────────┘")
+		e.logger.Debug("[Engine] ┌──────────────────────────────────────────────────────────────────┐")
+		e.logger.Debug("[Engine] │ 🔄 Turn %d", turn)
+		e.logger.Debug("[Engine] └──────────────────────────────────────────────────────────────────┘")
 
 		if e.shouldCompact(contextLayer.Conversation) {
 			contextLayer.Conversation = e.compactContext(contextLayer.Conversation)
@@ -202,21 +202,21 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 
 		availableTools := e.registry.GetAvailableTools()
 
-		fmt.Println("\n┌──────────────────────────────────────────────────────────────────┐")
-		fmt.Println("│ 🧠 Phase 1: THINKING                                             │")
-		fmt.Println("└──────────────────────────────────────────────────────────────────┘")
 		state.Phase = "THINKING"
+		e.logger.Debug("[Engine] ┌──────────────────────────────────────────────────────────────────┐")
+		e.logger.Debug("[Engine] │ 🧠 Phase 1: THINKING")
+		e.logger.Debug("[Engine] └──────────────────────────────────────────────────────────────────┘")
 		e.logger.Info("[Thinking] 分析当前状态...")
 
-		fmt.Println("\n💭 思考中...")
-		fmt.Println("   • 分析任务进展")
-		fmt.Println("   • 规划下一步行动")
-		fmt.Println("   • 选择合适的工具")
+		e.logger.Debug("[Thinking] 💭 思考中...")
+		e.logger.Debug("[Thinking]   • 分析任务进展")
+		e.logger.Debug("[Thinking]   • 规划下一步行动")
+		e.logger.Debug("[Thinking]   • 选择合适的工具")
 
-		fmt.Println("\n┌──────────────────────────────────────────────────────────────────┐")
-		fmt.Println("│ 🚀 Phase 2: ACTING                                               │")
-		fmt.Println("└──────────────────────────────────────────────────────────────────┘")
 		state.Phase = "ACTING"
+		e.logger.Debug("[Engine] ┌──────────────────────────────────────────────────────────────────┐")
+		e.logger.Debug("[Engine] │ 🚀 Phase 2: ACTING")
+		e.logger.Debug("[Engine] └──────────────────────────────────────────────────────────────────┘")
 		e.logger.Info("[Acting] 执行行动...")
 
 		actionResp, err := e.provider.Generate(ctx, messages, availableTools)
@@ -229,24 +229,24 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 		if actionResp.Content != "" {
 			state.Thought = actionResp.Content
 			if len(actionResp.ToolCalls) == 0 {
-				fmt.Printf("\n💬 %s\n", actionResp.Content)
+				e.logger.Debug("[Acting] 💬 %s", actionResp.Content)
 			}
 		}
 
 		if len(actionResp.ToolCalls) == 0 {
-			fmt.Println("\n┌──────────────────────────────────────────────────────────────────┐")
-			fmt.Println("│ ✅ 任务完成                                                      │")
-			fmt.Println("└──────────────────────────────────────────────────────────────────┘")
+			e.logger.Debug("[Engine] ┌──────────────────────────────────────────────────────────────────┐")
+			e.logger.Debug("[Engine] │ ✅ 任务完成")
+			e.logger.Debug("[Engine] └──────────────────────────────────────────────────────────────────┘")
 			state.IsComplete = true
 			states = append(states, state)
 			break
 		}
 
-		fmt.Println("\n┌──────────────────────────────────────────────────────────────────┐")
-		fmt.Println("│ 👁️ Phase 3: OBSERVATION                                          │")
-		fmt.Println("└──────────────────────────────────────────────────────────────────┘")
 		state.Phase = "OBSERVATION"
-		e.logger.Info("[Observation] 执行 %d 个工具调用...\n", len(actionResp.ToolCalls))
+		e.logger.Debug("[Engine] ┌──────────────────────────────────────────────────────────────────┐")
+		e.logger.Debug("[Engine] │ 👁️ Phase 3: OBSERVATION")
+		e.logger.Debug("[Engine] └──────────────────────────────────────────────────────────────────┘")
+		e.logger.Info("[Observation] 执行 %d 个工具调用...", len(actionResp.ToolCalls))
 
 		for i, toolCall := range actionResp.ToolCalls {
 			record := ToolCallRecord{
@@ -254,23 +254,23 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 				Arguments: string(toolCall.Arguments),
 			}
 
-			fmt.Printf("\n   🛠️  工具 #%d: %s\n", i+1, toolCall.Name)
-			fmt.Printf("   📥 参数: %s\n", string(toolCall.Arguments))
+			e.logger.Debug("[Observation]   🛠️  工具 #%d: %s", i+1, toolCall.Name)
+			e.logger.Debug("[Observation]   📥 参数: %s", string(toolCall.Arguments))
 
 			result := e.registry.Execute(ctx, toolCall)
 			record.Result = result.Output
 			record.IsError = result.IsError
 
 			if result.IsError {
-				fmt.Printf("   ❌ 失败: %s\n", result.Output)
-				e.logger.Info("[Observation] 工具 %s 执行失败: %s\n", toolCall.Name, result.Output)
+				e.logger.Debug("[Observation]   ❌ 失败: %s", result.Output)
+				e.logger.Info("[Observation] 工具 %s 执行失败: %s", toolCall.Name, result.Output)
 			} else {
 				output := result.Output
 				if len(output) > MaxObservationLen {
 					output = output[:MaxObservationLen] + "\n...[已截断]"
 				}
-				fmt.Printf("   ✅ 成功: %s\n", truncate(output, 150))
-				e.logger.Info("[Observation] 工具 %s 执行成功\n", toolCall.Name)
+				e.logger.Debug("[Observation]   ✅ 成功: %s", truncate(output, 150))
+				e.logger.Info("[Observation] 工具 %s 执行成功", toolCall.Name)
 			}
 
 			state.ToolCalls = append(state.ToolCalls, record)
@@ -283,27 +283,27 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 			contextLayer.Conversation = append(contextLayer.Conversation, observationMsg)
 		}
 
-		fmt.Println("\n┌──────────────────────────────────────────────────────────────────┐")
-		fmt.Println("│ 🔄 Phase 4: RE-THINKING                                          │")
-		fmt.Println("└──────────────────────────────────────────────────────────────────┘")
 		state.Phase = "RE-THINKING"
+		e.logger.Debug("[Engine] ┌──────────────────────────────────────────────────────────────────┐")
+		e.logger.Debug("[Engine] │ 🔄 Phase 4: RE-THINKING")
+		e.logger.Debug("[Engine] └──────────────────────────────────────────────────────────────────┘")
 		e.logger.Info("[Re-thinking] 根据观察结果调整策略...")
 
-		fmt.Println("\n📊 执行结果分析:")
+		e.logger.Debug("[Re-thinking] 📊 执行结果分析:")
 		for i, tc := range state.ToolCalls {
 			status := "✅"
 			if tc.IsError {
 				status = "❌"
 			}
-			fmt.Printf("   %s 工具 %d (%s): %s\n", status, i+1, tc.Name, truncate(tc.Result, 50))
+			e.logger.Debug("[Re-thinking]   %s 工具 %d (%s): %s", status, i+1, tc.Name, truncate(tc.Result, 50))
 		}
 
-		fmt.Println("\n🔄 准备下一轮循环...")
+		e.logger.Debug("[Re-thinking] 🔄 准备下一轮循环...")
 		states = append(states, state)
 	}
 
 	if turn >= e.MaxTurns {
-		fmt.Println("\n⚠️ 达到最大回合数限制")
+		e.logger.Debug("[Engine] ⚠️ 达到最大回合数限制")
 		e.logger.Info("[Engine] 达到最大回合数限制")
 	}
 
@@ -312,10 +312,10 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 }
 
 func (e *AgentEngine) printSummary(states []QueryState) {
-	fmt.Println("\n╔══════════════════════════════════════════════════════════════════╗")
-	fmt.Println("│ 📊 执行摘要                                                      │")
-	fmt.Println("╠══════════════════════════════════════════════════════════════════╣")
-	fmt.Printf("│ 总回合数: %d                                                     │\n", len(states))
+	e.logger.Debug("[Engine] ═══════════════════════════════════════════════════════════════════")
+	e.logger.Debug("[Engine] │ 📊 执行摘要")
+	e.logger.Debug("[Engine] ╠══════════════════════════════════════════════════════════════════")
+	e.logger.Debug("[Engine] │ 总回合数: %d", len(states))
 
 	totalTools := 0
 	successTools := 0
@@ -328,12 +328,9 @@ func (e *AgentEngine) printSummary(states []QueryState) {
 		}
 	}
 
-	fmt.Printf("│ 工具调用: %d 次 (成功 %d 次)                                    │\n", totalTools, successTools)
-	fmt.Println("╚══════════════════════════════════════════════════════════════════╝")
-
-	fmt.Println("\n╔══════════════════════════════════════════════════════════════════╗")
-	fmt.Println("│ 🎉 任务执行完毕                                                  │")
-	fmt.Println("╚══════════════════════════════════════════════════════════════════╝")
+	e.logger.Debug("[Engine] │ 工具调用: %d 次 (成功 %d 次)", totalTools, successTools)
+	e.logger.Debug("[Engine] ╚══════════════════════════════════════════════════════════════════")
+	e.logger.Debug("[Engine] 🎉 任务执行完毕")
 }
 
 func truncate(s string, maxLen int) string {
