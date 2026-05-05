@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	if err := logger.Init(logger.INFO, "logs", true); err != nil {
+	if err := logger.Init(logger.DEBUG, "logs", true); err != nil {
 		fmt.Printf("初始化日志失败: %v\n", err)
 		os.Exit(1)
 	}
@@ -35,7 +35,8 @@ func main() {
 
 	eng := engine.NewAgentEngine(llmProvider, registry, workDir, true)
 
-	prompt := "请读取 README.md 文件并根据内容创建一个简单的项目说明文档 SUMMARY.md"
+	//prompt := "请读取 README.md 文件并根据内容创建一个简单的项目说明文档 SUMMARY.md"
+	prompt := "请执行一个 Level 3 Agent 演示任务：总结当前项目的 Agent 架构。"
 
 	err := eng.Run(context.Background(), prompt)
 	if err != nil {
