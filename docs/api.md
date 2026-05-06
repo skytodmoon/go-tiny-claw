@@ -1,62 +1,23 @@
-# API 参考文档
+# Go Tiny Claw - API 文档模板
 
-## 核心接口
+## 工具调用
 
-### 工具调用
+### 文件工具
+- **读取文件**：`read_file(path: string)`
+- **写入文件**：`write_file(path: string, content: string)`
+- **编辑文件**：`edit_file(path: string, old_str: string, new_str: string)`
 
-#### 描述
-通过工具注册表调用内置工具（如文件读写、Bash 命令等）。
+### 命令行工具
+- **执行 Bash 命令**：`bash(command: string)`
 
-#### 请求示例
+## 核心模块
 
-```json
-{
-  "tool": "read_file",
-  "params": {
-    "path": "README.md"
-  }
-}
-```
+### 循环引擎
+- `MainLoop()`
 
-#### 响应示例
+### 工具注册表
+- `RegisterTool(name: string, tool: Tool)`
 
-```json
-{
-  "status": "success",
-  "result": "文件内容"
-}
-```
-
-### 四阶段循环
-
-#### 描述
-Agent 的工作循环：Thinking → Acting → Observation → Re-thinking。
-
-#### 请求示例
-
-```json
-{
-  "task": "读取文件并生成概述",
-  "phases": ["Thinking", "Acting", "Observation", "Re-thinking"]
-}
-```
-
-#### 响应示例
-
-```json
-{
-  "status": "success",
-  "summary": "任务完成总结"
-}
-```
-
----
-
-## 工具列表
-
-| 工具名称 | 描述 |
-|----------|------|
-| read_file | 读取文件内容 |
-| write_file | 写入文件 |
-| edit_file | 编辑文件内容 |
-| bash | 执行 Bash 命令 |
+### 上下文管理
+- `AddContext(key: string, value: string)`
+- `GetContext(key: string)`

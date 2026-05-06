@@ -1,71 +1,26 @@
 #!/bin/bash
 
-# Function to print usage
-usage() {
-    echo "Usage: $0 [options]"
-    echo "Options:"
-    echo "  -s, --source PATTERN    Source file pattern (e.g., '*_test.go')"
-    echo "  -t, --target PATTERN    Target file pattern (e.g., '*.go')"
-    echo "  -r, --recursive         Recursively process subdirectories"
-    echo "  -d, --dry-run           Dry run (show changes without applying)"
-    echo "  -h, --help              Show this help message"
+# 批量重命名项目中的测试文件
+# 用法示例: ./batch_rename.sh /path/to/project_name
+
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <项目路径>"
     exit 1
-}
-
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -s|--source)
-            SOURCE_PATTERN="$2"
-            shift 2
-            ;;
-        -t|--target)
-            TARGET_PATTERN="$2"
-            shift 2
-            ;;
-        -r|--recursive)
-            RECURSIVE=true
-            shift
-            ;;
-        -d|--dry-run)
-            DRY_RUN=true
-            shift
-            ;;
-        -h|--help)
-            usage
-            ;;
-        *)
-            echo "Unknown option: $1"
-            usage
-            ;;
-    esac
-done
-
-# Check required arguments
-if [[ -z "$SOURCE_PATTERN" || -z "$TARGET_PATTERN" ]]; then
-    echo "Error: Source and target patterns are required."
-    usage
 fi
 
-# Find files
-if [[ "$RECURSIVE" = true ]]; then
-    find_cmd="find . -name \"$SOURCE_PATTERN\""
-else
-    find_cmd="find . -maxdepth 1 -name \"$SOURCE_PATTERN\""
-fi
+PROJECT_DIR=$1
 
-# Process files
-echo "Batch renaming files:"
-eval "$find_cmd" | while read -r file; do
-    dir=$(dirname "$file")
-    base=$(basename "$file")
-    new_base=$(echo "$base" | sed "s/$SOURCE_PATTERN/$TARGET_PATTERN/")
-    new_file="$dir/$new_base"
+# 在项目中查找所有测试文件（假设测试文件以 _test.go 结尾）
+find "$PROJECT_DIR" -name "*_test.go" | while read -r testfile; do
+    BASE_NAME=$(basename "$testfile" "_test.go")
+    DIR_NAME=$(dirname "$testfile")
+    NEW_NAME="${DIR_NAME}/${BASE_NAME}_spec.go"
 
-    if [[ "$DRY_RUN" = true ]]; then
-        echo "Would rename: $file -> $new_file"
+    # 检查新文件名是否已存在
+    if [ -f "$NEW_NAME" ]; then
+        echo "警告: 文件 $NEW_NAME 已存在，跳过重命名 $testfile"
     else
-        echo "Renaming: $file -> $new_file"
-        mv "$file" "$new_file"
+        mv "$testfile" "$NEW_NAME"
+        echo "已重命名: $testfile -> $NEW_NAME"
     fi
 done
