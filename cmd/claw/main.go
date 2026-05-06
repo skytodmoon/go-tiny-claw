@@ -33,11 +33,12 @@ func main() {
 	registry.Register(tools.NewEditFileTool(workDir))
 	registry.Register(tools.NewBashTool(workDir))
 
-	eng := engine.NewAgentEngine(llmProvider, registry, workDir, true)
+	eng := engine.NewAgentEngine(llmProvider, registry, workDir, false)
 
 	//prompt := "请读取 README.md 文件并根据内容创建一个简单的项目说明文档 SUMMARY.md"
-	prompt := "请执行一个 Level 3 Agent 演示任务：总结当前项目的 Agent 架构。"
-
+	//prompt := "请执行一个 Level 3 Agent 演示任务：总结当前项目的 Agent 架构。"
+	// 发起一个需要局部修改的指令 
+	prompt := ` 我当前目录下有一个 server.go 文件。 请帮我把里面 "TODO: 增加鉴权逻辑" 下面的那个 if 语句，整个替换为： if user == nil { fmt.Println("Forbidden!") return } `
 	err := eng.Run(context.Background(), prompt)
 	if err != nil {
 		log.Fatal("引擎运行崩溃: %v", err)
