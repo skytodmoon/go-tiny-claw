@@ -56,8 +56,22 @@
 ### 核心功能
 - ✅ 多 Provider 支持（OpenAI、Claude、MiniMax、DeepSeek、GLM47、SiliconFlow）
 - ✅ 上下文管理（Token 监控、自动压缩）
-- ✅ 工具注册表（ReadFile、WriteFile、EditFile）
+- ✅ 工具注册表（ReadFile、WriteFile、EditFile、Bash）
 - ✅ 四阶段循环（Thinking → Acting → Observation → Re-thinking）
+- ✅ **工具调用并行化**：同一回合内无依赖的工具调用并发执行，提高性能
+
+### 并发设计原则
+
+框架采用智能并发策略：
+
+| 场景 | 执行方式 | 说明 |
+|------|----------|------|
+| 同一回合内多个工具调用 | **并行执行** | 模型单次思考请求的多个工具调用被认为是无依赖的 |
+| 有依赖关系的操作 | **串行执行** | 通过不同回合保证顺序（如先读取再写入） |
+
+这种设计确保：
+- **性能优化**：无依赖操作并行执行，减少总耗时
+- **数据一致性**：有依赖操作通过回合机制保证顺序执行
 
 ### Level 1 功能
 - ✅ 慢思考机制（Thinking Phase）
@@ -75,6 +89,7 @@
 - ✅ Prompt 结构优化（思考 vs 执行分离）
 - ✅ 执行结果反馈机制
 - ✅ 执行摘要统计
+- ✅ 工具调用并行化（并发执行）
 
 ### 日志系统
 - ✅ 日志级别控制（DEBUG、INFO、WARN、ERROR、FATAL）

@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/skytodmoon/go-tiny-claw/internal/logger"
 	"github.com/skytodmoon/go-tiny-claw/internal/provider"
@@ -248,39 +249,80 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 		e.logger.Debug("[Engine] └──────────────────────────────────────────────────────────────────┘")
 		e.logger.Info("[Observation] 执行 %d 个工具调用...", len(actionResp.ToolCalls))
 
+		// 【设计原则】同一回合内的工具调用被认为是无依赖的，可以并行执行
+		// 有依赖关系的操作（如先读取再写入）会由模型拆分成不同回合完成
+		// 这种设计确保了：
+		//   - 无依赖操作：并行执行，提高性能
+		//   - 有依赖操作：通过不同回合保证顺序执行
+
+		// 预分配切片存放并发工具执行结果
+		toolResults := make([]struct {
+			record        ToolCallRecord
+			observationMsg schema.Message
+		}, len(actionResp.ToolCalls))
+
+		// 使用 WaitGroup 等待所有协程完成
+		var wg sync.WaitGroup
+
+		e.logger.Debug("[Engine] 模型请求并发调用 %d 个工具...", len(actionResp.ToolCalls))
+
+		// 遍历所有工具调用，为每个工具开启一个 Goroutine
 		for i, toolCall := range actionResp.ToolCalls {
-			record := ToolCallRecord{
-				Name:      toolCall.Name,
-				Arguments: string(toolCall.Arguments),
-			}
+			wg.Add(1)
 
-			e.logger.Debug("[Observation]   🛠️  工具 #%d: %s", i+1, toolCall.Name)
-			e.logger.Debug("[Observation]   📥 参数: %s", string(toolCall.Arguments))
+			// 开启协程，注意将索引和工具调用作为参数传入，避免闭包变量捕获陷阱
+			go func(idx int, call schema.ToolCall) {
+				defer wg.Done()
 
-			result := e.registry.Execute(ctx, toolCall)
-			record.Result = result.Output
-			record.IsError = result.IsError
+				e.logger.Debug("[Observation]   -> [Go-%d] 🛠️ 触发并行执行: %s", idx+1, call.Name)
+				e.logger.Debug("[Observation]   -> [Go-%d] 📥 参数: %s", idx+1, string(call.Arguments))
 
-			if result.IsError {
-				e.logger.Debug("[Observation]   ❌ 失败: %s", result.Output)
-				e.logger.Info("[Observation] 工具 %s 执行失败: %s", toolCall.Name, result.Output)
-			} else {
-				output := result.Output
-				if len(output) > MaxObservationLen {
-					output = output[:MaxObservationLen] + "\n...[已截断]"
+				// 调用底层 Registry 执行工具
+				result := e.registry.Execute(ctx, call)
+
+				var output string
+				if result.IsError {
+					e.logger.Debug("[Observation]   -> [Go-%d] ❌ 失败: %s", idx+1, result.Output)
+					e.logger.Info("[Observation] 工具 %s 执行失败: %s", call.Name, result.Output)
+					output = result.Output
+				} else {
+					output = result.Output
+					if len(output) > MaxObservationLen {
+						output = output[:MaxObservationLen] + "\n...[已截断]"
+					}
+					e.logger.Debug("[Observation]   -> [Go-%d] ✅ 成功: %s", idx+1, truncate(output, 150))
+					e.logger.Info("[Observation] 工具 %s 执行成功", call.Name)
 				}
-				e.logger.Debug("[Observation]   ✅ 成功: %s", truncate(output, 150))
-				e.logger.Info("[Observation] 工具 %s 执行成功", toolCall.Name)
-			}
 
-			state.ToolCalls = append(state.ToolCalls, record)
+				// 封装结果，每个协程操作不同的索引，无需加锁
+				toolResults[idx] = struct {
+					record        ToolCallRecord
+					observationMsg schema.Message
+				}{
+					record: ToolCallRecord{
+						Name:      call.Name,
+						Arguments: string(call.Arguments),
+						Result:    result.Output,
+						IsError:   result.IsError,
+					},
+					observationMsg: schema.Message{
+						Role:       schema.RoleUser,
+						Content:    result.Output,
+						ToolCallID: call.ID,
+					},
+				}
 
-			observationMsg := schema.Message{
-				Role:       schema.RoleUser,
-				Content:    result.Output,
-				ToolCallID: toolCall.ID,
-			}
-			contextLayer.Conversation = append(contextLayer.Conversation, observationMsg)
+			}(i, toolCall) // 闭包传参
+		}
+
+		// 阻塞等待所有并发协程执行完毕
+		wg.Wait()
+		e.logger.Debug("[Engine] 所有并发工具执行完毕，开始聚合观察结果...")
+
+		// 聚合结果：按顺序追加到状态和上下文
+		for _, result := range toolResults {
+			state.ToolCalls = append(state.ToolCalls, result.record)
+			contextLayer.Conversation = append(contextLayer.Conversation, result.observationMsg)
 		}
 
 		state.Phase = "RE-THINKING"
