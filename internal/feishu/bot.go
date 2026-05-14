@@ -5,7 +5,9 @@ import (
     "context"
     "encoding/json"
     "fmt"
+    "io"
     "log"
+    "net/http"
     "os"
     "strings"
 
@@ -14,7 +16,6 @@ import (
     "github.com/skytodmoon/go-tiny-claw/internal/engine"
 
     lark "github.com/larksuite/oapi-sdk-go/v3"
-    larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 )
 
 // FeishuBot 封装了飞书机器人的配置与核心业务流
@@ -33,10 +34,8 @@ func NewFeishuBot(eng *engine.AgentEngine) *FeishuBot {
         log.Fatal("请设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET")
     }
 
-    // 使用自建应用模式实例化飞书客户端
-    client := lark.NewClient(appID, appSecret, 
-        lark.WithAppType(larkcore.AppTypeSelfBuilt),
-        lark.WithLogLevel(larkcore.LogLevelWarn))
+    // 使用默认配置实例化飞书客户端
+    client := lark.NewClient(appID, appSecret)
 
     return &FeishuBot{
         client:    client,
@@ -81,8 +80,9 @@ func (b *FeishuBot) GetEventDispatcher() *dispatcher.EventDispatcher {
 func (b *FeishuBot) handleAgentRun(chatId string, prompt string) {
     // 为当前聊天窗口实例化一个专属的 Reporter
     reporter := &FeishuReporter{
-        client: b.client,
-        chatId: chatId,
+        appID:     b.appID,
+        appSecret: b.appSecret,
+        chatId:    chatId,
     }
 
     // 启动引擎！
@@ -94,14 +94,65 @@ func (b *FeishuBot) handleAgentRun(chatId string, prompt string) {
 
 // ==========================================
 // FeishuReporter: 将引擎的输出格式化后发给飞书
+// 使用直接 HTTP 请求方式，避免 SDK 的 token 管理问题
 // ==========================================
 type FeishuReporter struct {
-    client *lark.Client
-    chatId string
+    appID     string
+    appSecret string
+    chatId    string
+    token     string
+}
+
+// getAccessToken 获取飞书应用的 access token
+func (r *FeishuReporter) getAccessToken(ctx context.Context) (string, error) {
+    if r.token != "" {
+        return r.token, nil
+    }
+
+    url := "https://open.feishu.cn/open-apis/auth/v3/app_access_token/"
+    
+    data := map[string]string{
+        "app_id":     r.appID,
+        "app_secret": r.appSecret,
+    }
+    
+    jsonData, err := json.Marshal(data)
+    if err != nil {
+        return "", err
+    }
+    
+    resp, err := http.Post(url, "application/json", strings.NewReader(string(jsonData)))
+    if err != nil {
+        return "", err
+    }
+    defer resp.Body.Close()
+    
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return "", err
+    }
+    
+    var result map[string]interface{}
+    if err := json.Unmarshal(body, &result); err != nil {
+        return "", err
+    }
+    
+    if code, ok := result["code"].(float64); ok && code != 0 {
+        return "", fmt.Errorf("获取 token 失败: %v", result["msg"])
+    }
+    
+    r.token = result["app_access_token"].(string)
+    return r.token, nil
 }
 
 // sendMsg 封装了调用飞书 OpenAPI 发送卡片/文本的操作
 func (r *FeishuReporter) sendMsg(text string) {
+    token, err := r.getAccessToken(context.Background())
+    if err != nil {
+        log.Printf("[Feishu] 获取 access token 失败: %v\n", err)
+        return
+    }
+
     // 构建文本消息内容
     textContent := map[string]string{
         "text": text,
@@ -109,16 +160,42 @@ func (r *FeishuReporter) sendMsg(text string) {
     contentBytes, _ := json.Marshal(textContent)
     contentStr := string(contentBytes)
 
-    msgReq := larkim.NewCreateMessageReqBuilder().
-        ReceiveIdType(larkim.ReceiveIdTypeChatId).
-        Body(larkim.NewCreateMessageReqBodyBuilder().
-            ReceiveId(r.chatId).
-            MsgType(larkim.MsgTypeText).
-            Content(contentStr).
-            Build()).
-        Build()
-
-    _, _ = r.client.Im.Message.Create(context.Background(), msgReq)
+    url := "https://open.feishu.cn/open-apis/im/v1/messages"
+    
+    msgReq := map[string]interface{}{
+        "receive_id": r.chatId,
+        "msg_type":   "text",
+        "content":    contentStr,
+    }
+    
+    jsonData, err := json.Marshal(msgReq)
+    if err != nil {
+        log.Printf("[Feishu] 构建消息失败: %v\n", err)
+        return
+    }
+    
+    req, err := http.NewRequest("POST", url, strings.NewReader(string(jsonData)))
+    if err != nil {
+        log.Printf("[Feishu] 创建请求失败: %v\n", err)
+        return
+    }
+    
+    req.Header.Set("Authorization", "Bearer "+token)
+    req.Header.Set("Content-Type", "application/json")
+    
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        log.Printf("[Feishu] 发送消息失败: %v\n", err)
+        return
+    }
+    defer resp.Body.Close()
+    
+    if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+        body, _ := io.ReadAll(resp.Body)
+        log.Printf("[Feishu] 发送消息失败，状态码: %d, 响应: %s\n", resp.StatusCode, string(body))
+    } else {
+        log.Printf("[Feishu] 消息发送成功\n")
+    }
 }
 
 func (r *FeishuReporter) OnThinking(ctx context.Context) {
