@@ -14,6 +14,7 @@ import (
     "github.com/skytodmoon/go-tiny-claw/internal/engine"
 
     lark "github.com/larksuite/oapi-sdk-go/v3"
+    larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 )
 
 // FeishuBot 封装了飞书机器人的配置与核心业务流
@@ -32,8 +33,10 @@ func NewFeishuBot(eng *engine.AgentEngine) *FeishuBot {
         log.Fatal("请设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET")
     }
 
-    // 实例化飞书官方客户端
-    client := lark.NewClient(appID, appSecret)
+    // 使用自建应用模式实例化飞书客户端
+    client := lark.NewClient(appID, appSecret, 
+        lark.WithAppType(larkcore.AppTypeSelfBuilt),
+        lark.WithLogLevel(larkcore.LogLevelWarn))
 
     return &FeishuBot{
         client:    client,
