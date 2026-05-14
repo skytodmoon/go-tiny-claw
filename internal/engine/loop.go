@@ -165,7 +165,7 @@ func (e *AgentEngine) compactContext(messages []schema.Message) []schema.Message
 	return compacted
 }
 
-func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
+func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Reporter) error {
 	e.logger.Debug("[Engine] ═══════════════════════════════════════════════════════════════════")
 	e.logger.Debug("[Engine] 🎯 任务: %s", truncate(userPrompt, 52))
 	e.logger.Debug("[Engine] ═══════════════════════════════════════════════════════════════════")
@@ -209,10 +209,16 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 		e.logger.Debug("[Engine] └──────────────────────────────────────────────────────────────────┘")
 		e.logger.Info("[Thinking] 分析当前状态...")
 
-		e.logger.Debug("[Thinking] 💭 思考中...")
-		e.logger.Debug("[Thinking]   • 分析任务进展")
-		e.logger.Debug("[Thinking]   • 规划下一步行动")
-		e.logger.Debug("[Thinking]   • 选择合适的工具")
+		if e.EnableThinking {
+			if reporter != nil {
+				reporter.OnThinking(ctx)
+			}
+
+			e.logger.Debug("[Thinking] 💭 思考中...")
+			e.logger.Debug("[Thinking]   • 分析任务进展")
+			e.logger.Debug("[Thinking]   • 规划下一步行动")
+			e.logger.Debug("[Thinking]   • 选择合适的工具")
+		}
 
 		state.Phase = "ACTING"
 		e.logger.Debug("[Engine] ┌──────────────────────────────────────────────────────────────────┐")
@@ -232,6 +238,10 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 			if len(actionResp.ToolCalls) == 0 {
 				e.logger.Debug("[Acting] 💬 %s", actionResp.Content)
 			}
+		}
+
+		if actionResp.Content != "" && reporter != nil {
+			reporter.OnMessage(ctx, actionResp.Content)
 		}
 
 		if len(actionResp.ToolCalls) == 0 {
@@ -277,6 +287,11 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 				e.logger.Debug("[Observation]   -> [Go-%d] 🛠️ 触发并行执行: %s", idx+1, call.Name)
 				e.logger.Debug("[Observation]   -> [Go-%d] 📥 参数: %s", idx+1, string(call.Arguments))
 
+				// 【Reporter】报告即将执行的工具
+				if reporter != nil {
+					reporter.OnToolCall(ctx, call.Name, string(call.Arguments))
+				}
+
 				// 调用底层 Registry 执行工具
 				result := e.registry.Execute(ctx, call)
 
@@ -292,6 +307,16 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 					}
 					e.logger.Debug("[Observation]   -> [Go-%d] ✅ 成功: %s", idx+1, truncate(output, 150))
 					e.logger.Info("[Observation] 工具 %s 执行成功", call.Name)
+				}
+
+				// 【Reporter】汇报工具执行结果
+				// 为了防止大文件读取导致消息过长被截断，仅汇报缩略版
+				if reporter != nil {
+					displayOutput := result.Output
+					if len(displayOutput) > 200 {
+						displayOutput = displayOutput[:200] + "... (已截断)"
+					}
+					reporter.OnToolResult(ctx, call.Name, displayOutput, result.IsError)
 				}
 
 				// 封装结果，每个协程操作不同的索引，无需加锁

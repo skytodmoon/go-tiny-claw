@@ -69,7 +69,7 @@ func main() {
 		fmt.Printf("\n📝 Running with prompt: %s\n", truncate(tc.Prompt, 60))
 
 		ctx := context.Background()
-		err := eng.Run(ctx, tc.Prompt)
+		err := eng.Run(ctx, tc.Prompt, nil)
 
 		if err != nil {
 			fmt.Printf("\n❌ Test failed: %v\n", err)

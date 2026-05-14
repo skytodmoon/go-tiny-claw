@@ -1,11 +1,12 @@
 package main
 
 import (
-	"context"
-	"fmt"
+	"net/http"
 	"os"
 
+	"github.com/larksuite/oapi-sdk-go/v3/core/httpserverext"
 	"github.com/skytodmoon/go-tiny-claw/internal/engine"
+	"github.com/skytodmoon/go-tiny-claw/internal/feishu"
 	"github.com/skytodmoon/go-tiny-claw/internal/logger"
 	"github.com/skytodmoon/go-tiny-claw/internal/provider"
 	"github.com/skytodmoon/go-tiny-claw/internal/tools"
@@ -13,8 +14,7 @@ import (
 
 func main() {
 	if err := logger.Init(logger.DEBUG, "logs", true); err != nil {
-		fmt.Printf("初始化日志失败: %v\n", err)
-		os.Exit(1)
+		logger.WithModule("main").Fatal("初始化日志失败: %v", err)
 	}
 
 	log := logger.WithModule("main")
@@ -35,14 +35,18 @@ func main() {
 
 	eng := engine.NewAgentEngine(llmProvider, registry, workDir, true)
 
-	//prompt := "请读取 README.md 文件并根据内容创建一个简单的项目说明文档 SUMMARY.md"
-	//prompt := "请执行一个 Level 3 Agent 演示任务：总结当前项目的 Agent 架构。"
-	// 发起一个需要局部修改的指令 
-	//prompt := ` 我当前目录下有一个 server.go 文件。 请帮我把里面 "TODO: 增加鉴权逻辑" 下面的那个 if 语句，整个替换为： if user == nil { fmt.Println("Forbidden!") return } `
-	// 下发一个需要收集多源信息的任务 
-	prompt := ` 我当前目录下有 STRUCTURE.md, TESTING.md, SUMMARY.md 三个文件。 为了节省时间，请你同时一次性读取这三个文件，并将它们的内容综合起来，告诉我它们分别记录了什么领域的信息。 `
-	err := eng.Run(context.Background(), prompt)
+	// 1. 初始化飞书 Bot
+	bot := feishu.NewFeishuBot(eng)
+	
+	// 2. 使用 httpserverext 创建事件处理函数
+	handler := httpserverext.NewEventHandlerFunc(bot.GetEventDispatcher())
+	
+	// 3. 注册路由并启动 HTTP 服务
+	http.HandleFunc("/webhook/event", handler)
+	port := ":48080"
+	log.Info("🚀 go-tiny-claw 飞书服务端已启动，正在监听 %s 端口", port)
+	err := http.ListenAndServe(port, nil)
 	if err != nil {
-		log.Fatal("引擎运行崩溃: %v", err)
+		log.Fatal("HTTP 服务器启动失败: %v", err)
 	}
 }

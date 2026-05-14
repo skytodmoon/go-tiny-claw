@@ -1,0 +1,10 @@
+2026-05-14 14:17:15.110 [FATAL] [main] 请先导出 SILICONFLOW_API_KEY 环境变量
+2026-05-14 14:17:35.610 [INFO] [registry] 成功挂载工具: read_file
+2026-05-14 14:17:35.610 [INFO] [registry] 成功挂载工具: write_file
+2026-05-14 14:17:35.610 [INFO] [registry] 成功挂载工具: edit_file
+2026-05-14 14:17:35.610 [INFO] [registry] 成功挂载工具: bash
+2026-05-14 14:20:53.056 [INFO] [registry] 成功挂载工具: read_file
+2026-05-14 14:20:53.057 [INFO] [registry] 成功挂载工具: write_file
+2026-05-14 14:20:53.057 [INFO] [registry] 成功挂载工具: edit_file
+2026-05-14 14:20:53.057 [INFO] [registry] 成功挂载工具: bash
+2026-05-14 14:20:53.057 [INFO] [main] 🚀 go-tiny-claw 飞书服务端已启动，正在监听 :48080 端口

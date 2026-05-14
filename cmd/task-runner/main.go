@@ -167,7 +167,7 @@ func main() {
 		fmt.Printf("📝 Prompt: %s\n", task.Prompt)
 		fmt.Println()
 
-		err := eng.Run(context.Background(), task.Prompt)
+		err := eng.Run(context.Background(), task.Prompt, nil)
 		if err != nil {
 			fmt.Printf("❌ 任务 %d 失败: %v\n\n", task.ID, err)
 			failed++

@@ -4,6 +4,7 @@ go 1.23.0
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.38.0
+	github.com/larksuite/oapi-sdk-go/v3 v3.7.5
 	github.com/openai/openai-go/v3 v3.33.0
 )
 

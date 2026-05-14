@@ -45,7 +45,7 @@ func TestLevel3ReadWriteCycle(t *testing.T) {
 	}
 
 	eng := testutils.CreateTestEngine(workDir, generateFunc)
-	err := eng.Run(context.Background(), "Create a summary of the project")
+	err := eng.Run(context.Background(),  "Create a summary of the project", nil)
 	if err != nil {
 		t.Fatalf("Engine.Run() error = %v", err)
 	}
@@ -94,7 +94,7 @@ func TestLevel3EditCycle(t *testing.T) {
 	}
 
 	eng := testutils.CreateTestEngine(workDir, generateFunc)
-	err := eng.Run(context.Background(), "Update the README")
+	err := eng.Run(context.Background(),  "Update the README", nil)
 	if err != nil {
 		t.Fatalf("Engine.Run() error = %v", err)
 	}
@@ -141,7 +141,7 @@ func TestLevel3MultipleTools(t *testing.T) {
 	}
 
 	eng := testutils.CreateTestEngine(workDir, generateFunc)
-	err := eng.Run(context.Background(), "Create two test files")
+	err := eng.Run(context.Background(),  "Create two test files", nil)
 	if err != nil {
 		t.Fatalf("Engine.Run() error = %v", err)
 	}
@@ -203,7 +203,7 @@ func TestLevel3ComplexWorkflow(t *testing.T) {
 	}
 
 	eng := testutils.CreateTestEngine(workDir, generateFunc)
-	err := eng.Run(context.Background(), "Create a comprehensive project report")
+	err := eng.Run(context.Background(),  "Create a comprehensive project report", nil)
 	if err != nil {
 		t.Fatalf("Engine.Run() error = %v", err)
 	}
@@ -252,7 +252,7 @@ func TestLevel3ErrorHandling(t *testing.T) {
 	}
 
 	eng := testutils.CreateTestEngine(workDir, generateFunc)
-	err := eng.Run(context.Background(), "Read a file that may not exist, handle error gracefully")
+	err := eng.Run(context.Background(),  "Read a file that may not exist, handle error gracefully", nil)
 	if err != nil {
 		t.Fatalf("Engine.Run() error = %v", err)
 	}
@@ -301,7 +301,7 @@ func TestLevel3EmptyContentHandling(t *testing.T) {
 	}
 
 	eng := testutils.CreateTestEngine(workDir, generateFunc)
-	err := eng.Run(context.Background(), "Test handling empty file content")
+	err := eng.Run(context.Background(),  "Test handling empty file content", nil)
 	if err != nil {
 		t.Fatalf("Engine.Run() error = %v", err)
 	}
@@ -341,7 +341,7 @@ func TestLevel3MaxTurnsLimit(t *testing.T) {
 	eng := testutils.CreateTestEngine(workDir, generateFunc)
 	eng.MaxTurns = maxTurns
 
-	err := eng.Run(context.Background(), "Test maximum turns limit")
+	err := eng.Run(context.Background(),  "Test maximum turns limit", nil)
 	if err != nil {
 		t.Fatalf("Engine.Run() error = %v", err)
 	}
@@ -376,7 +376,7 @@ func TestLevel3ContextCompression(t *testing.T) {
 	}
 
 	eng := testutils.CreateTestEngine(workDir, generateFunc)
-	err := eng.Run(context.Background(), "Create multiple files to test context compression mechanism")
+	err := eng.Run(context.Background(),  "Create multiple files to test context compression mechanism", nil)
 	if err != nil {
 		t.Fatalf("Engine.Run() error = %v", err)
 	}
@@ -403,7 +403,7 @@ func TestLevel3NoToolCalls(t *testing.T) {
 	}
 
 	eng := testutils.CreateTestEngine(workDir, generateFunc)
-	err := eng.Run(context.Background(), "Answer a simple question without tools")
+	err := eng.Run(context.Background(),  "Answer a simple question without tools", nil)
 	if err != nil {
 		t.Fatalf("Engine.Run() error = %v", err)
 	}
@@ -448,7 +448,7 @@ func TestLevel3MultipleToolCallsPerTurn(t *testing.T) {
 	}
 
 	eng := testutils.CreateTestEngine(workDir, generateFunc)
-	err := eng.Run(context.Background(), "Create three files simultaneously")
+	err := eng.Run(context.Background(),  "Create three files simultaneously", nil)
 	if err != nil {
 		t.Fatalf("Engine.Run() error = %v", err)
 	}
