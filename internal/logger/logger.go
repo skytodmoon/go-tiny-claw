@@ -51,14 +51,15 @@ type Logger struct {
 
 var (
 	globalLogger *Logger
-	once         sync.Once
+	initMutex    sync.Mutex
 )
 
 func Init(level LogLevel, logDir string, useColor bool) error {
+	initMutex.Lock()
+	defer initMutex.Unlock()
+	
 	var err error
-	once.Do(func() {
-		globalLogger, err = NewLogger(level, "main", logDir, useColor)
-	})
+	globalLogger, err = NewLogger(level, "main", logDir, useColor)
 	return err
 }
 
