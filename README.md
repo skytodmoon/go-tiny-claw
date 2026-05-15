@@ -121,14 +121,48 @@
 ## 快速开始
 
 ```bash
-# 设置 API Key（选择其中一个）
+# 设置 API Key
 export SILICONFLOW_API_KEY="your-api-key"
-export ZHIPU_API_KEY="your-api-key"
-export NVIDIA_API_KEY="your-api-key"
+export NVIDIA_API_KEY="your-nvidia-key"
+
+# 配置 Provider 顺序（可选，默认 nvidia,siliconflow）
+export PROVIDER_ORDER="nvidia,siliconflow"
+
+# 配置模型（可选）
+export NVIDIA_MODEL="minimaxai/minimax-m2.7"
+export SILICONFLOW_MODEL="deepseek-ai/DeepSeek-V3"
 
 # 运行
 go run cmd/claw/main.go
 ```
+
+### LLM 服务容错机制
+
+框架支持多 Provider 故障转移，当主服务不可用时自动切换到备用服务：
+
+| 环境变量 | 说明 | 默认值 |
+|----------|------|--------|
+| `PROVIDER_ORDER` | Provider 优先级顺序，逗号分隔 | `nvidia,siliconflow` |
+| `NVIDIA_API_KEY` | NVIDIA API Key | - |
+| `NVIDIA_MODEL` | NVIDIA 使用的模型 | `minimaxai/minimax-m2.7` |
+| `SILICONFLOW_API_KEY` | SiliconFlow API Key | - |
+| `SILICONFLOW_MODEL` | SiliconFlow 使用的模型 | `deepseek-ai/DeepSeek-V3` |
+| `LLM_TIMEOUT` | 单个 Provider 超时时间 | `30s` |
+| `MAX_RETRIES` | 最大重试次数 | `2` |
+
+**故障转移流程**：
+```
+用户请求 → NVIDIA（主）→ 失败/超时 → SiliconFlow（备）→ 失败 → 重试
+```
+
+**推荐模型**：
+
+| Provider | 模型 | 参数 | 说明 |
+|----------|------|------|------|
+| NVIDIA | `minimaxai/minimax-m2.7` | 7B | 默认，平衡性能和效果 |
+| NVIDIA | `meta/llama-3.3-70b-instruct` | 70B | 高质量 |
+| SiliconFlow | `deepseek-ai/DeepSeek-V3` | 67B | 默认，高性能 |
+| SiliconFlow | `Qwen/Qwen2-72B-Instruct` | 72B | 高质量 |
 
 ## 项目结构
 
@@ -150,20 +184,29 @@ go-tiny-claw/
 │   │   ├── claude.go           # Anthropic Claude 适配器
 │   │   ├── minimax.go          # MiniMax 适配器
 │   │   ├── deepseek.go         # DeepSeek 适配器
-│   │   ├── glm47.go            # GLM4.7 适配器
-│   │   └── siliconflow.go      # 硅基流动适配器
+│   │   ├── glm47.go            # GLM4.7/NVIDIA 适配器
+│   │   ├── nvidia.go           # NVIDIA API 适配器
+│   │   ├── siliconflow.go      # 硅基流动适配器
+│   │   └── failover.go         # 故障转移 Provider
 │   ├── context/                 # 上下文管理
 │   ├── tools/                   # 工具注册表与内置工具
 │   │   ├── registry.go         # 工具注册表
 │   │   ├── read_file.go       # 文件读取工具
 │   │   ├── write_file.go      # 文件写入工具
 │   │   ├── edit_file.go       # 文件编辑工具
-│   │   └── bash.go            # Bash 命令工具
+│   │   ├── bash.go            # Bash 命令工具
+│   │   └── read_skill.go      # 技能懒加载工具
 │   ├── memory/                  # 基于文件的记忆存储
 │   ├── feishu/                  # 飞书机器人集成
 │   └── logger/                  # 日志系统
 ├── integration/                 # 集成测试
 ├── testutils/                   # 测试工具
+├── workspace/                   # 工作区目录
+│   ├── .claw/skills/           # 技能文件目录
+│   │   ├── weather/            # 天气查询技能
+│   │   ├── news/               # 新闻查询技能
+│   │   └── git-workflow/       # Git 提交流程技能
+│   └── AGENTS.md               # 项目架构规范
 └── README.md
 ```
 
