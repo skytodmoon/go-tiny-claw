@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 
+	ctxpkg "github.com/skytodmoon/go-tiny-claw/internal/context" // 引入我们新建的 context 包
+
 	"github.com/skytodmoon/go-tiny-claw/internal/logger"
 	"github.com/skytodmoon/go-tiny-claw/internal/provider"
 	"github.com/skytodmoon/go-tiny-claw/internal/schema"
@@ -22,6 +24,7 @@ type AgentEngine struct {
 	registry       tools.Registry
 	WorkDir        string
 	EnableThinking bool
+	composer       *ctxpkg.PromptComposer // 【新增】引擎持有 Composer 实例
 	MaxTurns       int
 	tokenBudget    int
 	logger         *logger.Logger
@@ -33,6 +36,7 @@ func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, en
 		registry:       r,
 		WorkDir:        workDir,
 		EnableThinking: enableThinking,
+		composer:       ctxpkg.NewPromptComposer(workDir), // 初始化组装器
 		MaxTurns:       20,
 		tokenBudget:    MaxContextTokens,
 		logger:         logger.WithModule("engine"),
@@ -173,8 +177,13 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 	e.logger.Info("[Engine] 启动 Agent Loop, 工作区: %s", e.WorkDir)
 	e.logger.Info("[Engine] Token 预算: %d, 压缩阈值: %.0f%%", e.tokenBudget, CompactThreshold*100)
 
+	// 【核心修改】动态组装 System Prompt，注入内核、AGENTS.md 与 Skills
+	systemMsg := e.composer.Build()
+	e.logger.Debug("[Engine] 动态组装 System Prompt 完成")
+	e.logger.Debug("[Engine] 提示词：\n%s", systemMsg.Content)
+
 	contextLayer := &ContextLayer{
-		SystemPrompt: e.buildSystemPrompt("thinking"),
+		SystemPrompt: systemMsg.Content,
 		Conversation: []schema.Message{
 			{Role: schema.RoleUser, Content: userPrompt},
 		},
@@ -267,7 +276,7 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 
 		// 预分配切片存放并发工具执行结果
 		toolResults := make([]struct {
-			record        ToolCallRecord
+			record         ToolCallRecord
 			observationMsg schema.Message
 		}, len(actionResp.ToolCalls))
 
@@ -321,7 +330,7 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 
 				// 封装结果，每个协程操作不同的索引，无需加锁
 				toolResults[idx] = struct {
-					record        ToolCallRecord
+					record         ToolCallRecord
 					observationMsg schema.Message
 				}{
 					record: ToolCallRecord{
@@ -347,7 +356,18 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 		// 聚合结果：按顺序追加到状态和上下文
 		for _, result := range toolResults {
 			state.ToolCalls = append(state.ToolCalls, result.record)
-			contextLayer.Conversation = append(contextLayer.Conversation, result.observationMsg)
+
+			// 【懒加载机制】如果是 read_skill 工具调用，将技能正文作为系统消息注入上下文
+			if result.record.Name == "read_skill" && !result.record.IsError {
+				// 创建系统消息注入技能正文（用于后续对话）
+				skillMsg := schema.Message{
+					Role:    schema.RoleSystem,
+					Content: "【技能加载成功】\n" + result.record.Result,
+				}
+				contextLayer.Conversation = append(contextLayer.Conversation, skillMsg)
+			} else {
+				contextLayer.Conversation = append(contextLayer.Conversation, result.observationMsg)
+			}
 		}
 
 		state.Phase = "RE-THINKING"
