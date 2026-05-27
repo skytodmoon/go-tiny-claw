@@ -1,18 +1,17 @@
 package main
 
 import (
-	"net/http"
+	"context"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/larksuite/oapi-sdk-go/v3/core/httpserverext"
-	"github.com/skytodmoon/go-tiny-claw/internal/context"
+	ctxpkg "github.com/skytodmoon/go-tiny-claw/internal/context"
 	"github.com/skytodmoon/go-tiny-claw/internal/engine"
-	"github.com/skytodmoon/go-tiny-claw/internal/feishu"
 	"github.com/skytodmoon/go-tiny-claw/internal/logger"
 	"github.com/skytodmoon/go-tiny-claw/internal/provider"
+	"github.com/skytodmoon/go-tiny-claw/internal/schema"
 	"github.com/skytodmoon/go-tiny-claw/internal/tools"
 )
 
@@ -73,7 +72,7 @@ func main() {
 	}
 
 	// 创建技能加载器
-	skillLoader := context.NewSkillLoader(workDir)
+	skillLoader := ctxpkg.NewSkillLoader(workDir)
 
 	// 注册工具
 	registry := tools.NewRegistry()
@@ -83,22 +82,45 @@ func main() {
 	registry.Register(tools.NewBashTool(workDir))
 	registry.Register(tools.NewReadSkillTool(skillLoader)) // 新增：技能懒加载工具
 
-	eng := engine.NewAgentEngine(llmProvider, registry, workDir, true)
+	// ==================== 测试 OOM 保护功能 ====================
+	log.Info("🧪 开始测试内存压缩器 OOM 保护功能...")
 
-	// 1. 初始化飞书 Bot
-	bot := feishu.NewFeishuBot(eng)
+	// 实例化引擎 (关闭思考模式以提速)
+	eng := engine.NewAgentEngine(llmProvider, registry, false)
+	reporter := engine.NewTerminalReporter()
 
-	// 2. 使用 httpserverext 创建事件处理函数
-	handler := httpserverext.NewEventHandlerFunc(bot.GetEventDispatcher())
+	sessionID := "test_oom_protection_001"
+	sess := engine.NewSession(sessionID, workDir)
 
-	// 3. 注册路由并启动 HTTP 服务
-	http.HandleFunc("/webhook/event", handler)
-	port := ":48080"
-	log.Info("🚀 go-tiny-claw 飞书服务端已启动，正在监听 %s 端口", port)
-	err := http.ListenAndServe(port, nil)
+	// 发起一个会导致读取大文件的任务
+	prompt := `请帮我执行以下三个步骤：
+1. 使用 bash 执行 echo "开始排查日志"
+2. 使用 read_file 工具读取当前目录下的巨大文件 mock_log.txt
+3. 使用 bash 执行 date 命令获取当前时间，并告诉我任务全部完成。`
+
+	sess.Append(schema.Message{Role: schema.RoleUser, Content: prompt})
+	err := eng.Run(context.Background(), sess, reporter)
 	if err != nil {
-		log.Fatal("HTTP 服务器启动失败: %v", err)
+		log.Fatal("引擎运行崩溃: %v", err)
 	}
+
+	log.Info("✅ OOM 保护测试完成")
+	// ==================== OOM 保护测试结束 ====================
+
+	// // 1. 初始化飞书 Bot
+	// bot := feishu.NewFeishuBot(eng, workDir)
+
+	// // 2. 使用 httpserverext 创建事件处理函数
+	// handler := httpserverext.NewEventHandlerFunc(bot.GetEventDispatcher())
+
+	// // 3. 注册路由并启动 HTTP 服务
+	// http.HandleFunc("/webhook/event", handler)
+	// port := ":48080"
+	// log.Info("🚀 go-tiny-claw 飞书服务端已启动，正在监听 %s 端口", port)
+	// err = http.ListenAndServe(port, nil)
+	// if err != nil {
+	// 	log.Fatal("HTTP 服务器启动失败: %v", err)
+	// }
 }
 
 // buildProviders 根据配置顺序构建 Provider 列表

@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	ctxpkg "github.com/skytodmoon/go-tiny-claw/internal/context" // 引入我们新建的 context 包
-
+	ctxpkg "github.com/skytodmoon/go-tiny-claw/internal/context"
 	"github.com/skytodmoon/go-tiny-claw/internal/logger"
 	"github.com/skytodmoon/go-tiny-claw/internal/provider"
 	"github.com/skytodmoon/go-tiny-claw/internal/schema"
@@ -22,24 +21,20 @@ const (
 type AgentEngine struct {
 	provider       provider.LLMProvider
 	registry       tools.Registry
-	WorkDir        string
 	EnableThinking bool
-	composer       *ctxpkg.PromptComposer // 【新增】引擎持有 Composer 实例
-	MaxTurns       int
-	tokenBudget    int
 	logger         *logger.Logger
+	compactor      *ctxpkg.Compactor // 【新增】压缩器实例
 }
 
-func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, enableThinking bool) *AgentEngine {
+// 【注意】：移除了 Engine 层级的 WorkDir，因为 WorkDir 现在应该跟随 Session 走！
+func NewAgentEngine(p provider.LLMProvider, r tools.Registry, enableThinking bool) *AgentEngine {
 	return &AgentEngine{
 		provider:       p,
 		registry:       r,
-		WorkDir:        workDir,
 		EnableThinking: enableThinking,
-		composer:       ctxpkg.NewPromptComposer(workDir), // 初始化组装器
-		MaxTurns:       20,
-		tokenBudget:    MaxContextTokens,
 		logger:         logger.WithModule("engine"),
+		// 【初始化压缩器】：将水位线阈值设为 3000 字符用于极端测试，保护最近的 6 条消息
+		compactor: ctxpkg.NewCompactor(3000, 6),
 	}
 }
 
@@ -60,73 +55,6 @@ type ToolCallRecord struct {
 	IsError   bool
 }
 
-type ContextLayer struct {
-	SystemPrompt string
-	Memory       []schema.Message
-	Conversation []schema.Message
-	Compacted    bool
-}
-
-func (e *AgentEngine) buildSystemPrompt(phase string) string {
-	basePrompt := `你是 go-tiny-claw，一个专业的 AI Agent 编码助手。
-
-## 核心架构
-
-你运行在一个 **Thinking → Acting → Observation → Re-thinking** 的循环中：
-
-1. **Thinking (思考)**: 分析当前状态，规划下一步行动
-2. **Acting (行动)**: 选择并调用合适的工具
-3. **Observation (观察)**: 收集工具执行结果
-4. **Re-thinking (再思考)**: 根据观察结果调整策略
-
-## 工具系统
-
-可用工具（通过 tool_calls 调用）：
-- read_file: 读取文件内容 {"path": "文件路径"}
-- write_file: 写入文件 {"path": "路径", "content": "内容"}
-- edit_file: 编辑文件 {"path": "路径", "old_str": "原文本", "new_str": "新文本"}
-- bash: 执行 bash 命令 {"command": "命令"}
-
-## 执行原则
-
-1. **渐进式探索**: 先理解，再行动，最后验证
-2. **错误恢复**: 工具执行失败时，分析原因并重试
-3. **任务分解**: 复杂任务分解为多个步骤
-4. **上下文感知**: 根据之前的观察结果调整行为
-
-## 输出规则
-
-- 需要调用工具时，使用 tool_calls
-- 任务完成时，用自然语言总结
-- 遇到错误时，分析原因并提出解决方案`
-
-	switch phase {
-	case "thinking":
-		return basePrompt + `
-
-## 当前阶段: THINKING
-
-请深入思考：
-1. 当前任务进展如何？
-2. 下一步应该做什么？
-3. 需要使用哪些工具？
-4. 可能遇到什么问题？`
-
-	case "acting":
-		return basePrompt + `
-
-## 当前阶段: ACTING
-
-请执行行动：
-1. 根据思考结果选择工具
-2. 准备正确的参数
-3. 调用工具执行`
-
-	default:
-		return basePrompt
-	}
-}
-
 func (e *AgentEngine) estimateTokens(messages []schema.Message) int {
 	total := 0
 	for _, msg := range messages {
@@ -138,61 +66,23 @@ func (e *AgentEngine) estimateTokens(messages []schema.Message) int {
 	return total
 }
 
-func (e *AgentEngine) shouldCompact(messages []schema.Message) bool {
-	tokens := e.estimateTokens(messages)
-	return float64(tokens)/float64(e.tokenBudget) > CompactThreshold
-}
-
-func (e *AgentEngine) compactContext(messages []schema.Message) []schema.Message {
-	if len(messages) <= 4 {
-		return messages
-	}
-
-	e.logger.Info("[Context] 触发自动压缩...")
-
-	summary := "## 历史对话摘要\n\n"
-	for _, msg := range messages[1 : len(messages)-2] {
-		if msg.Role == schema.RoleUser {
-			summary += fmt.Sprintf("- 用户: %s\n", truncate(msg.Content, 100))
-		} else if msg.Role == schema.RoleAssistant {
-			summary += fmt.Sprintf("- 助手: %s\n", truncate(msg.Content, 100))
-		}
-	}
-
-	compacted := []schema.Message{
-		messages[0],
-		{Role: schema.RoleSystem, Content: summary},
-	}
-	compacted = append(compacted, messages[len(messages)-2:]...)
-
-	e.logger.Info("[Context] 压缩完成: %d 条消息 -> %d 条消息\n", len(messages), len(compacted))
-	return compacted
-}
-
-func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Reporter) error {
+// 【核心改造】: 移除 userPrompt 参数，改为接收一个具体的 Session 实例
+func (e *AgentEngine) Run(ctx context.Context, session *Session, reporter Reporter) error {
 	e.logger.Debug("[Engine] ═══════════════════════════════════════════════════════════════════")
-	e.logger.Debug("[Engine] 🎯 任务: %s", truncate(userPrompt, 52))
+	e.logger.Debug("[Engine] 🎯 唤醒会话 [%s]，锁定工作区: %s", session.ID, session.WorkDir)
 	e.logger.Debug("[Engine] ═══════════════════════════════════════════════════════════════════")
 
-	e.logger.Info("[Engine] 启动 Agent Loop, 工作区: %s", e.WorkDir)
-	e.logger.Info("[Engine] Token 预算: %d, 压缩阈值: %.0f%%", e.tokenBudget, CompactThreshold*100)
+	e.logger.Info("[Engine] 启动 Agent Loop, 会话: %s, 工作区: %s", session.ID, session.WorkDir)
 
-	// 【核心修改】动态组装 System Prompt，注入内核、AGENTS.md 与 Skills
-	systemMsg := e.composer.Build()
+	// 根据当前 Session 的工作区，动态组装最新的 System Prompt
+	composer := ctxpkg.NewPromptComposer(session.WorkDir)
+	systemMsg := composer.Build()
 	e.logger.Debug("[Engine] 动态组装 System Prompt 完成")
-	e.logger.Debug("[Engine] 提示词：\n%s", systemMsg.Content)
-
-	contextLayer := &ContextLayer{
-		SystemPrompt: systemMsg.Content,
-		Conversation: []schema.Message{
-			{Role: schema.RoleUser, Content: userPrompt},
-		},
-	}
 
 	states := []QueryState{}
 	turn := 0
 
-	for turn < e.MaxTurns {
+	for {
 		turn++
 		state := QueryState{Turn: turn}
 
@@ -200,18 +90,20 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 		e.logger.Debug("[Engine] │ 🔄 Turn %d", turn)
 		e.logger.Debug("[Engine] └──────────────────────────────────────────────────────────────────┘")
 
-		if e.shouldCompact(contextLayer.Conversation) {
-			contextLayer.Conversation = e.compactContext(contextLayer.Conversation)
-			contextLayer.Compacted = true
-		}
-
-		messages := []schema.Message{
-			{Role: schema.RoleSystem, Content: contextLayer.SystemPrompt},
-		}
-		messages = append(messages, contextLayer.Conversation...)
-
 		availableTools := e.registry.GetAvailableTools()
 
+		// 1. 从 Session 提取出近期的 Working Memory (最近 20 条，给压缩器留下充足的判断空间)
+		workingMemory := session.GetWorkingMemory(20)
+
+		var contextHistory []schema.Message
+		contextHistory = append(contextHistory, systemMsg)
+		contextHistory = append(contextHistory, workingMemory...)
+
+		// 2. 【核心注入点】: 在向 Provider 发起推理前，过一遍内存压缩器！
+		// 无论你带出了多少上下文，如果字符总数超标，早期日志将被掩码化，超大日志将被掐头去尾
+		compactedContext := e.compactor.Compact(contextHistory)
+
+		// 3. ================= Phase 1: Thinking =================
 		state.Phase = "THINKING"
 		e.logger.Debug("[Engine] ┌──────────────────────────────────────────────────────────────────┐")
 		e.logger.Debug("[Engine] │ 🧠 Phase 1: THINKING")
@@ -227,26 +119,38 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 			e.logger.Debug("[Thinking]   • 分析任务进展")
 			e.logger.Debug("[Thinking]   • 规划下一步行动")
 			e.logger.Debug("[Thinking]   • 选择合适的工具")
+
+			thinkResp, err := e.provider.Generate(ctx, compactedContext, nil)
+			if err != nil {
+				return fmt.Errorf("Thinking 阶段失败: %w", err)
+			}
+			if thinkResp.Content != "" {
+				// 【驾驭精髓】：写入 Session 的永远是全量的真实响应，不受 Compact 影响
+				session.Append(*thinkResp)
+				compactedContext = append(compactedContext, *thinkResp)
+				state.Thought = thinkResp.Content
+			}
 		}
 
+		// 3. ================= Phase 2: Action =================
 		state.Phase = "ACTING"
 		e.logger.Debug("[Engine] ┌──────────────────────────────────────────────────────────────────┐")
 		e.logger.Debug("[Engine] │ 🚀 Phase 2: ACTING")
 		e.logger.Debug("[Engine] └──────────────────────────────────────────────────────────────────┘")
 		e.logger.Info("[Acting] 执行行动...")
 
-		actionResp, err := e.provider.Generate(ctx, messages, availableTools)
+		actionResp, err := e.provider.Generate(ctx, compactedContext, availableTools)
 		if err != nil {
-			return fmt.Errorf("Acting 阶段失败: %w", err)
+			return fmt.Errorf("Action 阶段失败: %w", err)
 		}
 
-		contextLayer.Conversation = append(contextLayer.Conversation, *actionResp)
+		// 【驾驭精髓】：写入 Session 的永远是全量的真实响应，不受 Compact 影响
+		session.Append(*actionResp)
+		compactedContext = append(compactedContext, *actionResp)
 
 		if actionResp.Content != "" {
-			state.Thought = actionResp.Content
-			if len(actionResp.ToolCalls) == 0 {
-				e.logger.Debug("[Acting] 💬 %s", actionResp.Content)
-			}
+			state.Action = actionResp.Content
+			e.logger.Debug("[Acting] 💬 %s", truncate(actionResp.Content, 100))
 		}
 
 		if actionResp.Content != "" && reporter != nil {
@@ -262,64 +166,33 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 			break
 		}
 
+		// 4. ================= 并发执行底层工具 =================
 		state.Phase = "OBSERVATION"
 		e.logger.Debug("[Engine] ┌──────────────────────────────────────────────────────────────────┐")
 		e.logger.Debug("[Engine] │ 👁️ Phase 3: OBSERVATION")
 		e.logger.Debug("[Engine] └──────────────────────────────────────────────────────────────────┘")
 		e.logger.Info("[Observation] 执行 %d 个工具调用...", len(actionResp.ToolCalls))
 
-		// 【设计原则】同一回合内的工具调用被认为是无依赖的，可以并行执行
-		// 有依赖关系的操作（如先读取再写入）会由模型拆分成不同回合完成
-		// 这种设计确保了：
-		//   - 无依赖操作：并行执行，提高性能
-		//   - 有依赖操作：通过不同回合保证顺序执行
-
-		// 预分配切片存放并发工具执行结果
-		toolResults := make([]struct {
-			record         ToolCallRecord
-			observationMsg schema.Message
-		}, len(actionResp.ToolCalls))
-
-		// 使用 WaitGroup 等待所有协程完成
+		observationMsgs := make([]schema.Message, len(actionResp.ToolCalls))
+		toolResults := make([]ToolCallRecord, len(actionResp.ToolCalls))
 		var wg sync.WaitGroup
 
 		e.logger.Debug("[Engine] 模型请求并发调用 %d 个工具...", len(actionResp.ToolCalls))
 
-		// 遍历所有工具调用，为每个工具开启一个 Goroutine
 		for i, toolCall := range actionResp.ToolCalls {
 			wg.Add(1)
 
-			// 开启协程，注意将索引和工具调用作为参数传入，避免闭包变量捕获陷阱
 			go func(idx int, call schema.ToolCall) {
 				defer wg.Done()
 
 				e.logger.Debug("[Observation]   -> [Go-%d] 🛠️ 触发并行执行: %s", idx+1, call.Name)
-				e.logger.Debug("[Observation]   -> [Go-%d] 📥 参数: %s", idx+1, string(call.Arguments))
 
-				// 【Reporter】报告即将执行的工具
 				if reporter != nil {
 					reporter.OnToolCall(ctx, call.Name, string(call.Arguments))
 				}
 
-				// 调用底层 Registry 执行工具
 				result := e.registry.Execute(ctx, call)
 
-				var output string
-				if result.IsError {
-					e.logger.Debug("[Observation]   -> [Go-%d] ❌ 失败: %s", idx+1, result.Output)
-					e.logger.Info("[Observation] 工具 %s 执行失败: %s", call.Name, result.Output)
-					output = result.Output
-				} else {
-					output = result.Output
-					if len(output) > MaxObservationLen {
-						output = output[:MaxObservationLen] + "\n...[已截断]"
-					}
-					e.logger.Debug("[Observation]   -> [Go-%d] ✅ 成功: %s", idx+1, truncate(output, 150))
-					e.logger.Info("[Observation] 工具 %s 执行成功", call.Name)
-				}
-
-				// 【Reporter】汇报工具执行结果
-				// 为了防止大文件读取导致消息过长被截断，仅汇报缩略版
 				if reporter != nil {
 					displayOutput := result.Output
 					if len(displayOutput) > 200 {
@@ -328,70 +201,41 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Repor
 					reporter.OnToolResult(ctx, call.Name, displayOutput, result.IsError)
 				}
 
-				// 封装结果，每个协程操作不同的索引，无需加锁
-				toolResults[idx] = struct {
-					record         ToolCallRecord
-					observationMsg schema.Message
-				}{
-					record: ToolCallRecord{
-						Name:      call.Name,
-						Arguments: string(call.Arguments),
-						Result:    result.Output,
-						IsError:   result.IsError,
-					},
-					observationMsg: schema.Message{
-						Role:       schema.RoleUser,
-						Content:    result.Output,
-						ToolCallID: call.ID,
-					},
+				toolResults[idx] = ToolCallRecord{
+					Name:      call.Name,
+					Arguments: string(call.Arguments),
+					Result:    result.Output,
+					IsError:   result.IsError,
 				}
 
-			}(i, toolCall) // 闭包传参
+				if result.IsError {
+					e.logger.Debug("[Observation]   -> [Go-%d] ❌ 失败: %s", idx+1, truncate(result.Output, 50))
+				} else {
+					e.logger.Debug("[Observation]   -> [Go-%d] ✅ 成功", idx+1)
+				}
+
+				observationMsgs[idx] = schema.Message{
+					Role:       schema.RoleUser,
+					Content:    result.Output,
+					ToolCallID: call.ID,
+				}
+			}(i, toolCall)
 		}
 
-		// 阻塞等待所有并发协程执行完毕
 		wg.Wait()
-		e.logger.Debug("[Engine] 所有并发工具执行完毕，开始聚合观察结果...")
+		e.logger.Debug("[Engine] 所有并发工具执行完毕")
 
-		// 聚合结果：按顺序追加到状态和上下文
-		for _, result := range toolResults {
-			state.ToolCalls = append(state.ToolCalls, result.record)
+		session.Append(observationMsgs...)
+		state.ToolCalls = toolResults
 
-			// 【懒加载机制】如果是 read_skill 工具调用，将技能正文作为系统消息注入上下文
-			if result.record.Name == "read_skill" && !result.record.IsError {
-				// 创建系统消息注入技能正文（用于后续对话）
-				skillMsg := schema.Message{
-					Role:    schema.RoleSystem,
-					Content: "【技能加载成功】\n" + result.record.Result,
-				}
-				contextLayer.Conversation = append(contextLayer.Conversation, skillMsg)
-			} else {
-				contextLayer.Conversation = append(contextLayer.Conversation, result.observationMsg)
-			}
-		}
-
+		// 5. ================= Re-thinking =================
 		state.Phase = "RE-THINKING"
 		e.logger.Debug("[Engine] ┌──────────────────────────────────────────────────────────────────┐")
 		e.logger.Debug("[Engine] │ 🔄 Phase 4: RE-THINKING")
 		e.logger.Debug("[Engine] └──────────────────────────────────────────────────────────────────┘")
 		e.logger.Info("[Re-thinking] 根据观察结果调整策略...")
 
-		e.logger.Debug("[Re-thinking] 📊 执行结果分析:")
-		for i, tc := range state.ToolCalls {
-			status := "✅"
-			if tc.IsError {
-				status = "❌"
-			}
-			e.logger.Debug("[Re-thinking]   %s 工具 %d (%s): %s", status, i+1, tc.Name, truncate(tc.Result, 50))
-		}
-
-		e.logger.Debug("[Re-thinking] 🔄 准备下一轮循环...")
 		states = append(states, state)
-	}
-
-	if turn >= e.MaxTurns {
-		e.logger.Debug("[Engine] ⚠️ 达到最大回合数限制")
-		e.logger.Info("[Engine] 达到最大回合数限制")
 	}
 
 	e.printSummary(states)

@@ -8,6 +8,7 @@ import (
 	"github.com/skytodmoon/go-tiny-claw/internal/engine"
 	"github.com/skytodmoon/go-tiny-claw/internal/logger"
 	"github.com/skytodmoon/go-tiny-claw/internal/provider"
+	"github.com/skytodmoon/go-tiny-claw/internal/schema"
 	"github.com/skytodmoon/go-tiny-claw/internal/tools"
 )
 
@@ -41,7 +42,7 @@ func main() {
 	registry.Register(tools.NewEditFileTool(workDir))
 	registry.Register(tools.NewBashTool(workDir))
 
-	eng := engine.NewAgentEngine(llmProvider, registry, workDir, true)
+	eng := engine.NewAgentEngine(llmProvider, registry, true)
 
 	tasks := []Task{
 		{
@@ -167,7 +168,9 @@ func main() {
 		fmt.Printf("📝 Prompt: %s\n", task.Prompt)
 		fmt.Println()
 
-		err := eng.Run(context.Background(), task.Prompt, nil)
+		session := engine.NewSession(fmt.Sprintf("task-%d", task.ID), workDir)
+		session.Append(schema.Message{Role: schema.RoleUser, Content: task.Prompt})
+		err := eng.Run(context.Background(), session, nil)
 		if err != nil {
 			fmt.Printf("❌ 任务 %d 失败: %v\n\n", task.ID, err)
 			failed++

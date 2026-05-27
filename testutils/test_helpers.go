@@ -41,7 +41,7 @@ func CreateTestEngine(workDir string, generateFunc func(ctx context.Context, mes
 	registry.Register(tools.NewReadFileTool(workDir))
 	registry.Register(tools.NewWriteFileTool(workDir))
 	registry.Register(tools.NewEditFileTool(workDir))
-	return engine.NewAgentEngine(mockProvider, registry, workDir, true)
+	return engine.NewAgentEngine(mockProvider, registry, true)
 }
 
 func AssertFileExists(t *testing.T, path string) {
